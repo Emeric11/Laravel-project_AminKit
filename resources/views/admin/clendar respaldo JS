@@ -1,0 +1,892 @@
+ let calendar;
+        // Variables globales
+        let codigosCounter = 0;
+        let currentEvent = null; // Evento actualmente seleccionado
+
+        // ==================== FUNCIONES DEL FORMULARIO ====================
+
+        function addQuickEvent(eventType) {
+            const colors = {
+                'Reunión': '#3b82f6',
+                'Entrega': '#10b981',
+                'Recordatorio': '#f59e0b',
+                'Llamada': '#8b5cf6'
+            };
+
+            const eventTitle = `${eventType} - ${new Date().toLocaleDateString('es-ES')}`;
+            const eventId = 'quick_' + Date.now();
+
+            const event = calendar.addEvent({
+                id: eventId,
+                title: eventTitle,
+                start: new Date(),
+                allDay: true,
+                color: colors[eventType],
+                extendedProps: {
+                    tipo: 'quick',
+                    estado: 'pendiente',
+                    codigos: [],
+                    detalles: 'Evento rápido'
+                }
+            });
+
+            // Cargar el nuevo evento en el formulario
+            loadEventToForm(event);
+
+            updateTodayEvents();
+            alert(`✅ "${eventTitle}" agregado`);
+        }
+        // Crear nuevo evento
+        function createNewEvent(eventoData) {
+            const newEvent = calendar.addEvent(eventoData);
+            alert(`✅ OP ${eventoData.title} creada con éxito`);
+            updateTodayEvents();
+            return newEvent;
+        }
+        // Eliminar evento actual
+        function deleteCurrentEvent_AUX() {
+            if (!currentEvent) return;
+
+            if (confirm(`¿Estás seguro de eliminar la OP "${currentEvent.title}"?`)) {
+                currentEvent.remove();
+                alert('🗑️ Evento eliminado');
+                resetToNewEvent();
+                updateTodayEvents();
+            }
+        }
+        // Función para agregar fila de producto
+        function addCodigoRow(codigoData = null) {
+            const template = document.getElementById('codigoTemplate');
+            const clone = template.content.cloneNode(true);
+            const container = document.getElementById('codigosList');
+
+            // Si hay datos, prellenar
+            if (codigoData) {
+                clone.querySelector('.codigo').value = codigoData.codigo || '';
+                clone.querySelector('.descripcion').value = codigoData.descripcion || '';
+                clone.querySelector('.cantidad').value = codigoData.cantidad || 1;
+                clone.querySelector('.factura').value = codigoData.factura || '';
+                clone.querySelector('.ordenCompra').value = codigoData.ordenCompra || '';
+
+
+            }
+
+            // Asignar IDs únicos
+            const inputs = clone.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.id = `codigo_${codigosCounter}_${input.className.split(' ')[0]}`;
+            });
+
+            container.appendChild(clone);
+            codigosCounter++;
+        }
+
+        // Función para eliminar fila
+        function removeCodigoRow(button) {
+            button.closest('.codigo-row').remove();
+        }
+        // Función auxiliar: color por estado (mantenida en `calendar.blade.php`)
+        // Eliminada aquí para evitar duplicación. Usa la implementación centralizada en el script principal.
+        // ==================== FUNCIONES DE EVENTOS ====================
+        // Cargar datos de evento en formulario
+        function loadEventToForm(event) {
+            currentEvent = event;
+
+            // Actualizar título
+            document.getElementById('previewTitle').textContent = '📦 Editando: ' + event.title;
+            document.getElementById('previewMode').textContent = '(Editando)';
+            document.getElementById('currentEventId').value = event.id;
+
+            // Cargar datos básicos
+            document.getElementById('opNumber').value = event.title;
+
+            // Cargar fecha y hora
+            if (event.start) {
+                const startDate = event.start.toISOString().split('T')[0];
+                const startTime = event.start.toTimeString().substring(0, 5);
+
+                document.getElementById('eventDate').value = startDate;
+                document.getElementById('startTime').value = startTime;
+            }
+
+            // Cargar hora fin si existe
+            // Cargar hora fin si existe (linea ~34)
+            // Cargar hora fin si existe (linea ~34)
+            if (event.end) {
+                const endTime = event.end.toTimeString().substring(0, 5);
+                document.getElementById('endTime').value = endTime;
+            } else {
+                document.getElementById('endTime').value = '17:00'; // Default
+            }
+
+            // Cargar estado
+            const estado = event.extendedProps?.estado || 'pendiente';
+            document.getElementById('eventStatus').value = estado;
+
+            // Cargar códigos
+            document.getElementById('codigosList').innerHTML = '';
+            codigosCounter = 0;
+
+            const codigos = event.extendedProps?.codigos || [];
+            if (codigos.length > 0) {
+                codigos.forEach(codigo => {
+                    addCodigoRow(codigo);
+                });
+            } else {
+                addCodigoRow(); // Una fila vacía por defecto
+            }
+
+            // Mostrar botones de edición
+            document.getElementById('deleteBtn').style.display = 'block';
+            document.getElementById('cancelBtn').style.display = 'block';
+            //document.getElementById('updateBtn').innerHTML = '<i class="fas fa-save me-1"></i> Actualizar';
+
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('updateBtn').style.display = 'block';
+
+            // Cambiar color del formulario
+            document.querySelector('.event-preview').style.borderColor = getColorByStatus(estado);
+        }
+        // Resetear a formulario nuevo
+        function resetToNewEvent() {
+            currentEvent = null;
+
+            document.getElementById('previewTitle').textContent = '📦 Nueva Orden de Producción';
+            document.getElementById('previewMode').textContent = '(Nuevo)';
+            document.getElementById('currentEventId').value = '';
+
+            resetForm();
+
+            // Ocultar botones de edición
+            document.getElementById('deleteBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+            // document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save me-1"></i> Guardar';
+
+            // Después de resetear datos:
+            document.getElementById('saveBtn').style.display = 'block';
+            document.getElementById('updateBtn').style.display = 'none';
+
+            // Resetear color del borde
+            document.querySelector('.event-preview').style.borderColor = '#dee2e6';
+        }
+        // Función para resetear formulario
+        function resetForm() {
+            document.getElementById('opNumber').value = 'OP-';
+            document.getElementById('eventDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('startTime').value = '00:00';
+            document.getElementById('endTime').value = '01:00';
+            document.getElementById('eventStatus').value = 'pendiente';
+            document.getElementById('codigosList').innerHTML = '';
+            codigosCounter = 0;
+            addCodigoRow(); // Una fila vacía por defecto
+        }
+        // ==================== FUNCIÓN PARA OBTENER CÓDIGOS ====================
+        function getCodigosFromForm() {
+            const codigos = [];
+            document.querySelectorAll('.codigo-row').forEach(row => {
+                const codigo = row.querySelector('.codigo').value.trim();
+                const descripcion = row.querySelector('.descripcion').value.trim();
+                const cantidad = parseInt(row.querySelector('.cantidad').value) || 0;
+                const factura = row.querySelector('.factura')?.value.trim() || '';
+                const ordenCompra = row.querySelector('.ordenCompra')?.value.trim() || '';
+
+                if (codigo && descripcion && cantidad > 0) {
+                    codigos.push({
+                        codigo,
+                        descripcion,
+                        cantidad,
+                        factura, // ✅ Parte del array
+                        ordenCompra // ✅ Parte del array
+                    });
+                }
+            });
+            return codigos;
+        }
+
+        // ==================== CARGAR DATOS INICIALES DESDE LOCALSTORAGE ====================
+        function cargarEventosDesdeStorage() {
+            const eventosStorage = JSON.parse(localStorage.getItem('calendar_events')) || [];
+            const eventosCalendario = [];
+
+            eventosStorage.forEach(eventoBD => {
+                try {
+                    let startDate, endDate;
+
+                    // Si es allDay y tiene flag explícito
+                    if (eventoBD.is_all_day === true) {
+                        // Para eventos allDay: crear fecha sin hora (seteando a medio día)
+                        const fechaStart = new Date(eventoBD.fecha_inicio);
+                        startDate = new Date(fechaStart.getFullYear(), fechaStart.getMonth(), fechaStart.getDate(),
+                            12, 0, 0); // Medio día
+
+                        if (eventoBD.fecha_fin && eventoBD.fecha_fin !== eventoBD.fecha_inicio) {
+                            const fechaEnd = new Date(eventoBD.fecha_fin);
+                            endDate = new Date(fechaEnd.getFullYear(), fechaEnd.getMonth(), fechaEnd.getDate(), 12,
+                                0, 0);
+                        }
+                    } else {
+                        // Para eventos con horas: crear fecha completa
+                        startDate = new Date(eventoBD.fecha_inicio);
+                        if (eventoBD.fecha_fin) {
+                            endDate = new Date(eventoBD.fecha_fin);
+                        }
+                    }
+
+                    const eventoCalendario = {
+                        id: eventoBD.id,
+                        title: eventoBD.op_number,
+                        start: startDate,
+                        allDay: eventoBD.is_all_day === true, // ✅ Usar el flag explícito
+                        color: getColorByStatus(eventoBD.estado),
+                        extendedProps: {
+                            cliente: eventoBD.cliente,
+                            cantidadReq: eventoBD.cantidad_req,
+                            fechaEntrega: eventoBD.fecha_entrega,
+                            fechaProduccion: eventoBD.fecha_produccion,
+                            estado: eventoBD.estado,
+                            codigos: JSON.parse(eventoBD.codigos_json || '[]'),
+                            tipo: 'production'
+                        }
+                    };
+
+                    if (endDate && endDate.getTime() !== startDate.getTime()) {
+                        eventoCalendario.end = endDate;
+                    }
+
+                    eventosCalendario.push(eventoCalendario);
+
+                } catch (error) {
+                    console.error('Error cargando evento:', eventoBD, error);
+                }
+            });
+
+            console.log('📂 Eventos cargados:', eventosCalendario.length,
+                'allDay:', eventosCalendario.filter(e => e.allDay).length);
+            return eventosCalendario;
+        }
+        // ==================== ACTUALIZAR getInitialEvents() ====================
+        function getInitialEvents() {
+            const eventosStorage = cargarEventosDesdeStorage();
+
+            if (eventosStorage.length > 0) {
+                return eventosStorage;
+            }
+
+            // Eventos predeterminados como ALL DAY
+            const hoy = new Date();
+            const manana = new Date();
+            manana.setDate(hoy.getDate() + 1);
+
+            return [{
+                id: 'event_1',
+                title: 'OP-001',
+                start: hoy,
+                allDay: true, // ✅ DÍA COMPLETO
+                color: '#f59e0b',
+                extendedProps: {
+                    tipo: 'production',
+                    estado: 'pendiente',
+                    cliente: 'Cliente Ejemplo',
+                    cantidadReq: 1000,
+                    fechaEntrega: manana.toISOString().split('T')[0],
+                    codigos: [{
+                        codigo: 'PRD-001',
+                        descripcion: 'Tornillo 5mm',
+                        cantidad: 1000,
+                        factura: 'FAC-001',
+                        ordenCompra: 'OC-001'
+                    }]
+                }
+            }];
+        }
+        // Función PRINCIPAL para guardar/actualizar evento----------------------------------------------------------
+        function saveProductionEvent_RESPALDO() {
+            // 1. Validar OP
+            const opNumber = document.getElementById('opNumber').value.trim();
+            if (!opNumber || !opNumber.startsWith('OP-')) {
+                alert('❌ Ingresa un número de OP válido (ej: OP-001)');
+                return;
+            }
+
+            // 2. Obtener fecha y horas
+            const date = document.getElementById('eventDate').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (!startTime || !endTime) {
+                alert('❌ Define horario de inicio y fin');
+                return;
+            }
+
+            // Validar que la hora fin sea mayor a inicio
+            if (startTime >= endTime) {
+                alert('❌ La hora de fin debe ser mayor a la hora de inicio');
+                return;
+            }
+
+            // 3. Recolectar códigos de productos
+            const codigos = [];
+            const codigoRows = document.querySelectorAll('.codigo-row');
+
+            codigoRows.forEach(row => {
+                const codigo = row.querySelector('.codigo').value.trim();
+                const descripcion = row.querySelector('.descripcion').value.trim();
+                const cantidad = parseInt(row.querySelector('.cantidad').value) || 0;
+                const factura = row.querySelector('.factura').value.trim();
+                const oc = row.querySelector('.ordenCompra').value.trim();
+
+                if (codigo && descripcion && cantidad > 0) {
+                    codigos.push({
+                        codigo: codigo,
+                        descripcion: descripcion,
+                        cantidad: cantidad,
+                        factura: factura,
+                        ordenCompra: oc
+                    });
+                }
+            });
+
+            if (codigos.length === 0) {
+                alert('❌ Agrega al menos un producto');
+                return;
+            }
+
+            // 4. Crear objeto de evento
+            const estado = document.getElementById('eventStatus').value;
+            const eventoData = {
+                title: opNumber,
+                start: date, // Solo la fecha
+                allDay: true, // Evento de día completo
+                color: getColorByStatus(estado),
+                extendedProps: {
+                    // Información principal
+                    cliente: document.getElementById('cliente').value,
+                    cantidadReq: parseInt(document.getElementById('cantidadReq').value) || 0,
+
+                    fechaEntrega: document.getElementById('fechaEntrega').value,
+
+                    tipo: 'production',
+                    estado: estado,
+                    codigos: codigos,
+                    detalles: `${codigos.length} producto(s)`
+                }
+            };
+            guardarEventoEnStorage({
+                id: currentEvent.id,
+                ...eventoData
+            }, true);
+            // 5. ACTUALIZAR o CREAR evento
+            if (currentEvent) {
+                // 🔄 ACTUALIZAR evento existente
+                currentEvent.setProp('title', eventoData.title);
+                currentEvent.setDates(eventoData.start, eventoData.end);
+                currentEvent.setProp('color', eventoData.color);
+                currentEvent.setExtendedProp('estado', eventoData.extendedProps.estado);
+                currentEvent.setExtendedProp('codigos', eventoData.extendedProps.codigos);
+                currentEvent.setExtendedProp('detalles', eventoData.extendedProps.detalles);
+
+                alert(`✅ OP ${opNumber} actualizada`);
+            } else {
+                /* // ➕ CREAR nuevo evento (verificar duplicado)
+                 const existe = calendar.getEvents().find(e => e.title === opNumber);
+                 if (existe) {
+                     alert(`❌ La OP "${opNumber}" ya existe`);
+                     return;
+                 }*/
+
+                calendar.addEvent(eventoData);
+                alert(`✅ OP ${opNumber} creada`);
+            }
+
+            // 6. Preparar para guardar en BD
+            const eventoParaBD = {
+                op_number: opNumber,
+                fecha_inicio: eventoData.start,
+                fecha_fin: eventoData.end,
+                estado: estado,
+                codigos_json: JSON.stringify(codigos),
+                tipo_evento: 'production'
+            };
+
+            console.log('📦 Evento para BD:', eventoParaBD);
+
+            // 7. Actualizar vista y limpiar formulario
+            updateTodayEvents();
+            resetToNewEvent();
+        }
+        // ==================== GUARDAR EN LOCALSTORAGE ====================
+        function guardarEventoEnStorage(eventoData, esActualizacion = false) {
+            // Obtener eventos actuales
+            let eventos = JSON.parse(localStorage.getItem('calendar_events')) || [];
+            // Determinar si es allDay basado en el evento del calendario
+            const isAllDay = eventoData.allDay === true;
+
+            // Formatear fechas según sea allDay o no
+            let fecha_inicio, fecha_fin;
+
+            if (isAllDay) {
+                // Para eventos allDay: guardar solo fecha (YYYY-MM-DD)
+                fecha_inicio = eventoData.start.split('T')[0]; // Solo la parte de fecha
+                fecha_fin = eventoData.end ? eventoData.end.split('T')[0] : fecha_inicio;
+            } else {
+                // Para eventos con horas: guardar fecha y hora completa
+                fecha_inicio = eventoData.start;
+                fecha_fin = eventoData.end || eventoData.start;
+            }
+            // Usar SOLO los datos de eventoData (sin crear nuevos)
+            const eventoParaBD = {
+                id: eventoData.id || 'event_' + Date.now(),
+                op_number: eventoData.title, // ✅ De eventoData
+                fecha_inicio: eventoData.start, // ✅ De eventoData (ya incluye hora)
+                fecha_fin: eventoData.end || eventoData.start, // ✅ De eventoData
+                is_all_day: isAllDay, // ✅ NUEVO: Marcar explícitamente si es allDay
+
+                // Campos de extendedProps
+                cliente: eventoData.extendedProps?.cliente || '',
+                cantidad_req: eventoData.extendedProps?.cantidadReq || 0,
+                fecha_entrega: eventoData.extendedProps?.fechaEntrega || '',
+                fecha_produccion: eventoData.extendedProps?.fechaProduccion || '',
+                estado: eventoData.extendedProps?.estado || 'pendiente',
+
+                // Códigos
+                codigos_json: JSON.stringify(eventoData.extendedProps?.codigos || [])
+            };
+
+            if (esActualizacion && eventoData.id) {
+                // Actualizar evento existente
+                const index = eventos.findIndex(e => e.id === eventoData.id);
+                if (index !== -1) {
+                    eventos[index] = {
+                        ...eventos[index],
+                        ...eventoParaBD,
+                        updated_at: new Date().toISOString()
+                    };
+                }
+            } else {
+                // Agregar nuevo evento
+                eventoParaBD.created_at = new Date().toISOString();
+                eventoParaBD.updated_at = new Date().toISOString();
+                eventos.push(eventoParaBD);
+            }
+
+            // Guardar en localStorage
+            localStorage.setItem('calendar_events', JSON.stringify(eventos));
+
+            console.log('💾 Evento guardado:', eventoParaBD);
+            console.log('📊 Total eventos:', eventos.length);
+
+            return eventoParaBD;
+        }
+        // ==================== FUNCIÓN PRINCIPAL PARA CREAR EVENTOS ====================
+        // ==================== saveProductionEvent() CORREGIDA ====================
+        function saveProductionEvent() {
+            // 1. Validar OP
+            const opNumber = document.getElementById('opNumber').value.trim();
+            if (!opNumber) {
+                alert('❌ Ingresa un número de OP');
+                return;
+            }
+
+            // 2. Obtener fecha y horas
+            const date = document.getElementById('eventDate').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (!startTime || !endTime) {
+                alert('❌ Define horario de inicio y fin');
+                return;
+            }
+
+            if (startTime >= endTime) {
+                alert('❌ La hora de fin debe ser mayor a la hora de inicio');
+                return;
+            }
+
+            // 3. Obtener códigos
+            const codigos = getCodigosFromForm();
+
+            if (codigos.length === 0) {
+                alert('❌ Agrega al menos un producto');
+                return;
+            }
+
+            // 4. Crear objeto de evento CON HORAS
+            const estado = document.getElementById('eventStatus').value;
+            const eventoData = {
+                title: opNumber,
+                start: `${date}T${startTime}:00`, // ✅ CON HORA
+                //end: `${date}T${endTime}:00`, // ✅ CON HORA
+                allDay: true, // ✅ DÍA COMPLETO POR DEFECTO
+                color: getColorByStatus(estado),
+                extendedProps: {
+                    cliente: document.getElementById('cliente')?.value || '',
+                    cantidadReq: parseInt(document.getElementById('cantidadReq')?.value) || 0,
+                    fechaEntrega: document.getElementById('fechaEntrega')?.value || '',
+                    fechaProduccion: document.getElementById('fechaProduccion')?.value || '',
+                    estado: estado,
+                    codigos: codigos,
+                    tipo: 'production'
+                }
+            };
+
+            // 5. Crear nuevo evento
+            const nuevoEvento = calendar.addEvent(eventoData);
+
+            // Asignar ID
+            const eventId = 'event_' + Date.now();
+            nuevoEvento.setProp('id', eventId);
+            nuevoEvento.setAllDay(true); // ❌ NO es evento de día completo
+
+            // 6. Guardar en localStorage
+            guardarEventoEnStorage({
+                id: eventId,
+                ...eventoData
+            }, false);
+
+            // 7. Cargar para editar
+            loadEventToForm(nuevoEvento);
+            alert(`✅ OP ${opNumber} creada`);
+
+            // 8. Actualizar y limpiar
+            updateTodayEvents();
+        }
+        // ==================== updateProductionEvent() CORREGIDA ====================
+        function updateProductionEvent() {
+            if (!currentEvent) {
+                alert('❌ No hay evento seleccionado');
+                return;
+            }
+
+            // 1. Validar OP
+            const opNumber = document.getElementById('opNumber').value.trim();
+            if (!opNumber) {
+                alert('❌ Ingresa un número de OP');
+                return;
+            }
+
+            // 2. Obtener fecha y horas DEL FORMULARIO
+            const date = document.getElementById('eventDate').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (!startTime || !endTime) {
+                alert('❌ Define horario de inicio y fin');
+                return;
+            }
+
+            if (startTime >= endTime) {
+                alert('❌ La hora de fin debe ser mayor a la hora de inicio');
+                return;
+            }
+
+            // 3. Obtener códigos
+            const codigos = getCodigosFromForm();
+
+            if (codigos.length === 0) {
+                alert('❌ Agrega al menos un producto');
+                return;
+            }
+
+            // 4. Crear objeto de evento CON HORAS CORRECTAS
+            const estado = document.getElementById('eventStatus').value;
+            const eventoData = {
+                id: currentEvent.id,
+                title: opNumber,
+                //start: `${date}T${startTime}:00`, // ✅ CON HORA
+                //end: `${date}T${endTime}:00`, // ✅ CON HORA
+                color: getColorByStatus(estado),
+                extendedProps: {
+                    cliente: document.getElementById('cliente')?.value || '',
+                    cantidadReq: parseInt(document.getElementById('cantidadReq')?.value) || 0,
+                    fechaEntrega: document.getElementById('fechaEntrega')?.value || '',
+                    fechaProduccion: document.getElementById('fechaProduccion')?.value || '',
+                    estado: estado,
+                    codigos: codigos,
+                    tipo: 'production',
+                    detalles: `${codigos.length} producto(s)`
+                }
+            };
+
+            // 5. Actualizar evento en calendario (CON HORAS)
+            currentEvent.setProp('title', eventoData.title);
+            currentEvent.setStart(eventoData.start); // ✅ CON HORA
+            currentEvent.setEnd(eventoData.end); // ✅ CON HORA
+            currentEvent.setProp('color', eventoData.color);
+            currentEvent.setAllDay(false); // ❌ NO es evento de día completo
+
+            // Actualizar extendedProps
+            Object.keys(eventoData.extendedProps).forEach(key => {
+                currentEvent.setExtendedProp(key, eventoData.extendedProps[key]);
+            });
+
+            // 6. Guardar en localStorage
+            guardarEventoEnStorage(eventoData, true);
+
+            alert(`✅ OP ${opNumber} actualizada`);
+            updateTodayEvents();
+            resetToNewEvent();
+        }
+        // Actualizar evento existente
+        function updateExistingEvent(event, newData) {
+            // Actualizar propiedades del evento
+            event.setProp('title', newData.title);
+            event.setDates(newData.start, newData.end);
+            event.setProp('color', newData.color);
+
+            // Actualizar extendedProps
+            const currentProps = event.extendedProps;
+            event.setExtendedProp('estado', newData.extendedProps.estado);
+            event.setExtendedProp('codigos', newData.extendedProps.codigos);
+            event.setExtendedProp('detalles', newData.extendedProps.detalles);
+
+            alert(`✅ OP ${newData.title} actualizada`);
+            updateTodayEvents();
+        }
+
+        function deleteCurrentEvent() {
+            if (!currentEvent) return;
+
+            if (confirm(`¿Estás seguro de eliminar la OP "${currentEvent.title}"?`)) {
+                // Eliminar de localStorage
+                let eventos = JSON.parse(localStorage.getItem('calendar_events')) || [];
+                eventos = eventos.filter(e => e.id !== currentEvent.id);
+                localStorage.setItem('calendar_events', JSON.stringify(eventos));
+
+                // Eliminar del calendario
+                currentEvent.remove();
+
+                alert('🗑️ Evento eliminado');
+                resetToNewEvent();
+                updateTodayEvents();
+            }
+        }
+        // ==================== INICIALIZACIÓN DEL CALENDARIO ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
+
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                locale: 'es',
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listMultiMonth today'
+                },
+
+                // CONFIGURACIÓN PARA VISTAS MÚLTIPLES
+                views: {
+                    dayGridMonth: {
+                        dayMaxEventRows: 3, // Máximo 3 eventos por día
+                        dayMaxEvents: true // Muestra "+ más" si hay muchos
+                    },
+                    listMultiMonth: {
+                        type: 'list',
+                        duration: {
+                            months: 3
+                        },
+                        buttonText: '3 Meses',
+                        listDayFormat: {
+                            weekday: 'short',
+                            day: 'numeric'
+                        },
+                        listDaySideFormat: false // No mostrar fecha al lado
+                    },
+                    timeGridWeek: {
+                        allDaySlot: true,
+                        slotDuration: '00:30:00'
+                    },
+                    timeGridDay: {
+                        allDaySlot: true,
+                        slotDuration: '00:30:00'
+                    }
+                },
+
+                // MEJOR MANEJO DE EVENTOS
+                eventDisplay: 'block', // Siempre mostrar como bloque
+                eventTimeFormat: { // Formato de hora consistente
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    meridiem: 'short'
+                },
+
+                // MEJOR RENDIMIENTO
+                eventRender: function(info) {
+                    // Forzar que eventos allDay se muestren correctamente
+                    if (info.event.allDay) {
+                        info.el.classList.add('fc-event-all-day');
+                    }
+                },
+
+                // ERROR HANDLING
+                eventSourceSuccess: function(content, xhr) {
+                    console.log('✅ Eventos cargados correctamente');
+                },
+                eventSourceFailure: function(error) {
+                    console.error('❌ Error cargando eventos:', error);
+                },
+                height: 'auto',
+                contentHeight: 500,
+                aspectRatio: 1.5,
+                editable: true,
+                droppable: true,
+                //events: getInitialEvents(),
+                events: getInitialEvents(), // ✅ Ahora carga de localStorage
+                // Cuando se hace click en una fecha
+                dateClick: function(info) {
+                    console.log(info);
+                    document.getElementById('eventDate').value = info.dateStr;
+                    //document.getElementById('opNumber').focus();
+                    document.getElementById('eventDate').value = info.dateStr;
+                    //document.getElementById('startTime').value;
+                    // document.getElementById('endTime').value;
+                    //resetToNewEvent(); // Cambiar a modo nuevo evento
+                },
+
+                // Cuando se hace click en un evento
+                eventClick: function(info) {
+                    info.jsEvent.preventDefault(); // Prevenir comportamiento por defecto
+                    loadEventToForm(info.event);
+                },
+
+                // Cuando se arrastra y suelta un evento (drag & drop)
+                eventDrop: function(info) {
+                    // Si el evento era allDay, asignarle horas por defecto (1 hora)
+                    if (info.event.allDay) {
+                        const horaInicio = info.date.getHours();
+                        const horaFin = horaInicio + 1;
+
+                        const startDate = new Date(info.date);
+                        startDate.setHours(horaInicio, 0, 0);
+
+                        const endDate = new Date(info.date);
+                        endDate.setHours(horaFin, 0, 0);
+
+                        // Convertir a evento con horas
+                        info.event.setAllDay(false);
+                        info.event.setStart(startDate);
+                        info.event.setEnd(endDate);
+                    }
+
+                    // Actualizar formulario si es el evento seleccionado
+                    if (currentEvent && currentEvent.id === info.event.id) {
+                        loadEventToForm(info.event);
+                    }
+
+                    // Guardar en localStorage
+                    guardarEventoEnStorage(info.event, true);
+                },
+
+                // Cuando se cambia el tamaño de un evento
+                // ==================== ACTUALIZAR eventResize PARA CAMBIAR HORAS ====================
+                eventResize: function(info) {
+                    // Permite ajustar la duración arrastrando
+                    if (currentEvent && currentEvent.id === info.event.id) {
+                        loadEventToForm(info.event);
+                    }
+
+                    // Guardar en localStorage
+                    guardarEventoEnStorage(info.event, true);
+                }
+
+                // Ver datos en consola
+                // console.log('🗃️ Eventos en localStorage:', JSON.parse(localStorage.getItem('calendar_events')) || []);
+            });
+
+            calendar.render();
+            updateTodayEvents();
+            resetToNewEvent(); // Iniciar en modo nuevo evento
+        });
+        // Función para actualizar eventos en BD (cuando implementes backend)
+        function updateEventInDatabase(event) {
+            const eventoParaBD = {
+                id: event.id,
+                op_number: event.title,
+                fecha_inicio: event.start.toISOString(),
+                fecha_fin: event.end ? event.end.toISOString() : null,
+                estado: event.extendedProps.estado || 'pendiente',
+                codigos_json: JSON.stringify(event.extendedProps.codigos || [])
+            };
+
+            console.log('🔄 Evento actualizado (drag & drop):', eventoParaBD);
+
+            // Aquí iría tu llamada AJAX para guardar en BD
+            /*
+            fetch('/calendar/events/' + event.id, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(eventoParaBD)
+            });
+            */
+        }
+        function updateTodayEvents() {
+            const today = new Date().toDateString();
+            const events = calendar.getEvents();
+            const todayEvents = events.filter(event =>
+                event.start && event.start.toDateString() === today
+            );
+
+            const container = document.getElementById('todayEvents');
+            if (todayEvents.length === 0) {
+                container.innerHTML = `
+            <div class="list-group-item py-3 text-center text-muted">
+                <small>No hay eventos para hoy</small>
+            </div>
+               `;
+                return;
+            }
+
+            let html = '';
+            todayEvents.forEach(event => {
+                const time = event.start ? event.start.toLocaleTimeString('es-ES', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }) : 'Todo el día';
+
+                const estado = event.extendedProps?.estado || 'pendiente';
+                const estadoColor = estado === 'completado' ? 'success' :
+                    estado === 'en_progreso' ? 'primary' :
+                    estado === 'retrasado' ? 'danger' : 'warning';
+
+                html += `
+            <div class="list-group-item list-group-item-action py-2" onclick="loadEventById('${event.id}')" style="cursor: pointer;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <small class="text-primary">${time}</small>
+                        <div>${event.title}</div>
+                        <span class="badge bg-${estadoColor}">${estado}</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeEvent('${event.id}', event)">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+              `;
+            });
+
+            container.innerHTML = html;
+        }
+        // Cargar evento por ID (desde la lista "Hoy")
+        function loadEventById(eventId) {
+            const event = calendar.getEventById(eventId);
+            if (event) {
+                loadEventToForm(event);
+                // Desplazar el sidebar hacia arriba para ver el formulario
+                document.querySelector('.sidebar-actions').scrollTop = 0;
+            }
+        }
+        // Eliminar evento (desde lista "Hoy")
+        function removeEvent(eventId, clickEvent) {
+            if (clickEvent) clickEvent.stopPropagation(); // Evitar que se active el click del div
+
+            const event = calendar.getEventById(eventId);
+            if (event && confirm(`¿Eliminar "${event.title}"?`)) {
+                event.remove();
+
+                // Si el evento eliminado es el que está en edición, resetear formulario
+                if (currentEvent && currentEvent.id === eventId) {
+                    resetToNewEvent();
+                }
+
+                updateTodayEvents();
+            }
+        }
