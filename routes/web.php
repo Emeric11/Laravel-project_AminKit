@@ -13,4 +13,5 @@ Route::prefix('admin')->group(function () {
     Route::get('/calendar', function () {
         return view('admin.calendar');
     });
+    
 });

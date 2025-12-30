@@ -138,7 +138,6 @@
 
 @section('content')
     <div class="row">
-
         <!-- Calendario principal (3/4 ancho) -->
         <div class="col-lg-9 col-m  d-8">
             <div class="card">
@@ -147,22 +146,12 @@
                 </div>
             </div>
         </div>
-
         <!-- Sidebar acciones rápidas (1/4 ancho) -->
         <div class="col-lg-3 col-md-4">
             <div class="sidebar-actions">
-
-
-
-
-
-
                 <!-- Vista previa del evento seleccionado -->
                 <!-- REEMPLAZA todo el div "event-preview" con este código: -->
                 <div class="event-preview" id="eventPreview">
-
-
-
                     <div class="row g-2 mb-2">
                         <div class="col-6">
                             <label class="form-label small">Fecha Entrega</label>
@@ -344,6 +333,8 @@
     <script src="{{ asset('vendor/fullcalendar/lib/locales/es.js') }}"></script>
 @endpush
 
+
+
 @section('scripts')
     <script>
         // ==================== CONFIGURACIÓN GLOBAL ====================
@@ -352,7 +343,240 @@
         let codigosCounter = 0;
         // Variable global para guardar la última fecha seleccionada
         let ultimaFechaSeleccionada = null;
+        // ==================== INICIALIZACIÓN DEL CALENDARIO ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
 
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                locale: 'es',
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listMultiMonth today'
+                },
+
+                // ✅ CONFIGURACIÓN 24 HORAS
+                // Formato de hora en 24h
+                eventTimeFormat: {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false, // ✅ Esto cambia a formato 24h
+                    meridiem: false
+                },
+
+                // Formato de etiquetas de tiempo
+                slotLabelFormat: {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false, // ✅ 24 horas
+                    meridiem: false
+                },
+
+                // Vistas con configuración 24h
+                views: {
+                    dayGridMonth: {
+                        dayMaxEventRows: 3,
+                        dayMaxEvents: true,
+                        // Eventos en vista mensual mostrarán hora en 24h si tienen
+                        eventTimeFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                        }
+                    },
+                    listMultiMonth: {
+                        type: 'list',
+                        duration: {
+                            months: 3
+                        },
+                        buttonText: '3 Meses',
+                        // Formato 24h en lista
+                        listDayFormat: {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                        }
+                    },
+                    timeGridWeek: {
+                        allDaySlot: true,
+                        allDayText: 'Todo el día',
+                        slotDuration: '01:00:00',
+                        slotLabelInterval: '01:00:00',
+                        slotMinTime: '00:00:00', // ✅ Empieza a medianoche
+                        slotMaxTime: '24:00:00', // ✅ Termina a medianoche
+                        slotLabelFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false // ✅ 24 horas
+                        }
+                    },
+                    timeGridDay: {
+                        allDaySlot: true,
+                        allDayText: 'Todo el día',
+                        slotDuration: '00:30:00',
+                        slotMinTime: '00:00:00', // ✅ 0:00
+                        slotMaxTime: '24:00:00', // ✅ 24:00
+                        slotLabelFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false // ✅ 24 horas
+                        }
+                    }
+                },
+
+                // Configuración general
+                allDaySlot: true,
+                allDayText: 'Todo el día',
+                height: 'auto',
+                contentHeight: 500,
+                editable: true,
+                droppable: true,
+                events: cargarEventosDesdeStorage(),
+
+                // ✅ ACTUALIZAR eventDrop PARA HORAS 24H
+                eventDrop: function(info) {
+                    console.log('🎮 EventDrop - Vista:', info.view.type);
+                    try {
+                        // 1. DETECTAR SI CAMBIÓ DE FECHA
+                        let cambioDeFecha = false;
+
+                        if (info.oldEvent && info.oldEvent.start) {
+                            cambioDeFecha = info.oldEvent.start.toDateString() !== info.event.start
+                                .toDateString();
+                        } else {
+                            cambioDeFecha = true;
+                        }
+                        // 2. DETERMINAR TIPO DE MOVIMIENTO
+                        const esVistaMensual = info.view.type === 'dayGridMonth';
+                        const esVistaHoraria = info.view.type.includes('timeGrid');
+                        // 3. APLICAR REGLAS
+                        if (esVistaMensual) {
+                            // ✅ VISTA MENSUAL: Siempre a allDay
+                            const fechaAllDay = new Date(info.event.start);
+                            fechaAllDay.setHours(12, 0, 0, 0);
+
+                            info.event.setAllDay(true);
+                            info.event.setStart(fechaAllDay);
+                            info.event.setEnd(null);
+
+                            console.log('📅 Movido en vista mensual -> allDay');
+                        } else if (esVistaHoraria && info.event.allDay) {
+                            // ✅ De allDay a horario (formato 24h)
+                            const hora = 8; // 08:00 en formato 24h
+                            const horaFin = hora + 1; // 09:00
+                            const startDate = new Date(info.event.start);
+                            startDate.setHours(hora, 0, 0, 0);
+
+                            const endDate = new Date(startDate);
+                            endDate.setHours(horaFin, 0, 0, 0);
+
+                            info.event.setAllDay(false);
+                            info.event.setStart(startDate);
+                            info.event.setEnd(endDate);
+
+                            console.log('⏰ AllDay -> Horario 24h:', hora + ':00 - ' + horaFin + ':00');
+                        }
+                        // 4. CAMBIAR ESTADO SI HUBO CAMBIO
+                        if (esVistaHoraria) {
+                            const estadoActual = info.event.extendedProps?.estado || 'pendiente';
+
+                            if (estadoActual === 'pendiente') {
+                                info.event.setExtendedProp('estado', 'en_progreso');
+                                info.event.setProp('color', getColorByStatus('en_progreso'));
+                                console.log('🔵 Estado -> en_progreso');
+                            }
+                        }
+                        // 5. GUARDAR CAMBIOS
+                        guardarEventoEnStorage(info.event, true);
+
+                        // 6. ACTUALIZAR INTERFAZ
+                        if (currentEvent && currentEvent.id === info.event.id) {
+                            setTimeout(() => {
+                                loadEventToForm(info.event);
+                            }, 100);
+                        }
+
+                        updateTodayEvents();
+
+                    } catch (error) {
+                        console.error('❌ Error en eventDrop:', error);
+                        if (info.revert && typeof info.revert === 'function') {
+                            info.revert();
+                        }
+                    }
+                },
+                // ==================== ACTUALIZAR dateClick ====================
+                // En la configuración del calendario:
+                // En la configuración del calendario, añade:
+                dateClick: function(info) {
+                    console.log('🖱️ Click en fecha:', info.dateStr);
+
+                    // Guardar fecha para doble click
+                    if (!this.ultimoClick) this.ultimoClick = {
+                        time: 0,
+                        date: null
+                    };
+
+                    const ahora = Date.now();
+                    const esDobleClick = (ahora - this.ultimoClick.time < 300) &&
+                        this.ultimoClick.date === info.dateStr;
+
+                    this.ultimoClick = {
+                        time: ahora,
+                        date: info.dateStr
+                    };
+
+                    if (esDobleClick) {
+                        // Doble click: ir a vista diaria automáticamente
+                        console.log('🖱️🖱️ Doble click detectado');
+                        irAVistaFecha(info.date, 'diaria');
+                        return;
+                    }
+
+                    // Click simple: seleccionar fecha normalmente
+                    const tipoVista = info.view.type === 'dayGridMonth' ? 'mensual' : 'semanal';
+                    mostrarSeleccionFecha(info.date, tipoVista);
+                    document.getElementById('eventDate').value = info.dateStr;
+                    resetToNewEvent();
+
+                    setTimeout(() => {
+                        document.getElementById('opNumber').focus();
+                    }, 100);
+                },
+
+                eventClick: function(info) {
+                    info.jsEvent.preventDefault();
+                    loadEventToForm(info.event);
+                },
+
+                eventResize: function(info) {
+                    try {
+                        console.log('📏 EventResize');
+
+                        const estadoActual = info.event.extendedProps?.estado || 'pendiente';
+                        if (estadoActual === 'pendiente') {
+                            info.event.setExtendedProp('estado', 'en_progreso');
+                            info.event.setProp('color', getColorByStatus('en_progreso'));
+                        }
+
+                        guardarEventoEnStorage(info.event, true);
+
+                        if (currentEvent && currentEvent.id === info.event.id) {
+                            loadEventToForm(info.event);
+                        }
+
+                        updateTodayEvents();
+                    } catch (error) {
+                        console.error('❌ Error en eventResize:', error);
+                    }
+                }
+            });
+
+            calendar.render();
+            updateTodayEvents();
+            resetToNewEvent();
+        });
         // ==================== UTILIDADES: Toasts y escape ====================
         function escapeHtml(unsafe) {
             if (unsafe === null || unsafe === undefined) return '';
@@ -363,7 +587,6 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         }
-
         function showToast(message, type = 'info', timeout = 3000) {
             const container = document.getElementById('toastContainer');
             if (!container) {
@@ -411,10 +634,6 @@
                 alert(message);
             }
         }
-
-
-
-    
         // ==================== FUNCIÓN PARA MOSTRAR FECHA SELECCIONADA ====================
         function mostrarSeleccionFecha(fecha, vista = 'mensual') {
             // 1. Quitar selección anterior
@@ -472,8 +691,7 @@
                 }
             }, 50);
         }
-
-        // ==================== NOTIFICACIÓN VISUAL ====================
+        // =================== NOTIFICACIÓN VISUAL ====================
         function mostrarNotificacionFecha(fecha) {
             // Crear o actualizar notificación
             let notificacion = document.getElementById('fecha-seleccionada-notif');
@@ -550,7 +768,6 @@
             const template = document.getElementById('codigoTemplate');
             const clone = template.content.cloneNode(true);
             const container = document.getElementById('codigosList');
-
             if (codigoData) {
                 clone.querySelector('.codigo').value = codigoData.codigo || '';
                 clone.querySelector('.descripcion').value = codigoData.descripcion || '';
@@ -558,7 +775,6 @@
                 clone.querySelector('.factura').value = codigoData.factura || '';
                 clone.querySelector('.ordenCompra').value = codigoData.ordenCompra || '';
             }
-
             container.appendChild(clone);
             codigosCounter++;
         }
@@ -577,18 +793,14 @@
                         console.warn('⚠️ Evento sin fecha_inicio:', eventoBD);
                         return;
                     }
-
                     // Convertir fechas
                     const startDate = new Date(eventoBD.fecha_inicio);
-
                     let endDate = null;
                     if (eventoBD.fecha_fin && eventoBD.fecha_fin !== eventoBD.fecha_inicio) {
                         endDate = new Date(eventoBD.fecha_fin);
                     }
-
                     // DETERMINAR si es allDay (forma segura)
                     let isAllDay = false;
-
                     if (eventoBD.is_all_day !== undefined) {
                         // Usar el flag si existe
                         isAllDay = eventoBD.is_all_day === true;
@@ -602,7 +814,6 @@
                             startDate.getMinutes() === 0 &&
                             startDate.getSeconds() === 0;
                     }
-
                     // Ajustar allDay a medio día
                     if (isAllDay) {
                         startDate.setHours(12, 0, 0, 0);
@@ -610,7 +821,6 @@
                             endDate.setHours(12, 0, 0, 0);
                         }
                     }
-
                     const eventoCalendario = {
                         id: eventoBD.id,
                         title: eventoBD.op_number || 'Sin título',
@@ -627,18 +837,15 @@
                             tipo: 'production'
                         }
                     };
-
                     if (endDate && endDate.getTime() !== startDate.getTime()) {
                         eventoCalendario.end = endDate;
                     }
-
                     eventosCalendario.push(eventoCalendario);
 
                 } catch (error) {
                     console.error('❌ Error cargando evento:', error, 'Datos:', eventoBD);
                 }
             });
-
             console.log(`📂 ${eventosCalendario.length} eventos cargados`);
             return eventosCalendario;
         }
@@ -684,25 +891,20 @@
             localStorage.setItem('calendar_events', JSON.stringify(eventos));
             return eventoParaBD;
         }
-
-
         // ==================== FUNCIONES DEL FORMULARIO ====================
         function loadEventToForm(event) {
             currentEvent = event;
             const props = event.extendedProps || {};
-
             // Configurar título
             document.getElementById('previewTitle').textContent = '📦 Editando: ' + event.title;
             document.getElementById('previewMode').textContent = '(Editando)';
             document.getElementById('currentEventId').value = event.id;
-
             // Datos básicos
             document.getElementById('opNumber').value = event.title;
             document.getElementById('cliente').value = props.cliente || '';
             document.getElementById('cantidadReq').value = props.cantidadReq || '';
             document.getElementById('fechaEntrega').value = props.fechaEntrega || '';
             document.getElementById('fechaProduccion').value = props.fechaProduccion || '';
-
             // Fecha y hora del evento
             if (event.start) {
                 const fecha = event.start.toISOString().split('T')[0];
@@ -715,14 +917,12 @@
                     document.getElementById('startTime').value = '00:00';
                 }
             }
-
             if (event.end && !event.allDay) {
                 const horaFin = event.end.toTimeString().substring(0, 5);
                 document.getElementById('endTime').value = horaFin;
             } else {
                 document.getElementById('endTime').value = '01:00';
             }
-
             // Estado
             document.getElementById('eventStatus').value = props.estado || 'pendiente';
 
@@ -735,7 +935,6 @@
             } else {
                 addCodigoRow();
             }
-
             // Botones
             document.getElementById('saveBtn').style.display = 'none';
             document.getElementById('updateBtn').style.display = 'block';
@@ -744,7 +943,6 @@
         }
         function resetToNewEvent() {
             currentEvent = null;
-
             // Resetear formulario
             document.getElementById('previewTitle').textContent = '📦 Nueva Orden de Producción';
             document.getElementById('previewMode').textContent = '(Nuevo)';
@@ -778,7 +976,6 @@
 
             // 2. ✅ ASEGURAR QUE SE USA LA FECHA SELECCIONADA
             let fechaEvento;
-
             if (ultimaFechaSeleccionada) {
                 // Usar la fecha seleccionada por el usuario
                 fechaEvento = ultimaFechaSeleccionada.toISOString().split('T')[0];
@@ -788,17 +985,14 @@
                 fechaEvento = document.getElementById('eventDate').value;
                 console.log('⚠️ Usando fecha del formulario:', fechaEvento);
             }
-
             // Validar que tenemos fecha
             if (!fechaEvento) {
                 showToast('❌ No hay fecha seleccionada. Haz click en una fecha del calendario primero.', 'danger');
                 return;
             }
-
             // 3. Obtener códigos
             const codigos = getCodigosFromForm();
             if (codigos.length === 0) { showToast('❌ Agrega al menos un producto', 'danger'); return; }
-
             // 4. Crear evento allDay por defecto EN LA FECHA SELECCIONADA
             const eventoData = {
                 title: opNumber,
@@ -815,27 +1009,21 @@
                     tipo: 'production'
                 }
             };
-
             // 5. Agregar al calendario
             const nuevoEvento = calendar.addEvent(eventoData);
             const eventId = 'event_' + Date.now();
             nuevoEvento.setProp('id', eventId);
-
             // 6. Guardar en localStorage
             guardarEventoEnStorage({
                 id: eventId,
                 ...eventoData
             }, false);
-
             // 7. Cargar para editar
             loadEventToForm(nuevoEvento);
-
             // 8. Feedback al usuario
             showToast(`✅ OP ${escapeHtml(opNumber)} creada para el ${new Date(fechaEvento).toLocaleDateString('es-ES')}`, 'success');
-
             // 9. Actualizar y limpiar
             updateTodayEvents();
-
             // 10. Limpiar selección visual
             setTimeout(() => {
                 document.querySelectorAll('.fc-day-selected, .fc-timegrid-col-selected').forEach(el => {
@@ -907,8 +1095,7 @@
                 resetToNewEvent();
                 updateTodayEvents();
             }
-        }
-  
+        }                                                     
         // ==================== FUNCIONES ADICIONALES ====================
         function updateTodayEvents() {
             const today = new Date().toDateString();
@@ -1078,248 +1265,8 @@
 
             setTimeout(() => notificacion.remove(), 2500);
         }
-
-              // ==================== INICIALIZACIÓN DEL CALENDARIO ====================
-        document.addEventListener('DOMContentLoaded', function() {
-            const calendarEl = document.getElementById('calendar');
-
-            calendar = new FullCalendar.Calendar(calendarEl, {
-                locale: 'es',
-                initialView: 'dayGridMonth',
-                headerToolbar: {
-                    left: 'prev,next',
-                    center: 'title',
-                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listMultiMonth today'
-                },
-
-                // ✅ CONFIGURACIÓN 24 HORAS
-                // Formato de hora en 24h
-                eventTimeFormat: {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false, // ✅ Esto cambia a formato 24h
-                    meridiem: false
-                },
-
-                // Formato de etiquetas de tiempo
-                slotLabelFormat: {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false, // ✅ 24 horas
-                    meridiem: false
-                },
-
-                // Vistas con configuración 24h
-                views: {
-                    dayGridMonth: {
-                        dayMaxEventRows: 3,
-                        dayMaxEvents: true,
-                        // Eventos en vista mensual mostrarán hora en 24h si tienen
-                        eventTimeFormat: {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false
-                        }
-                    },
-                    listMultiMonth: {
-                        type: 'list',
-                        duration: {
-                            months: 3
-                        },
-                        buttonText: '3 Meses',
-                        // Formato 24h en lista
-                        listDayFormat: {
-                            weekday: 'short',
-                            day: 'numeric',
-                            month: 'short'
-                        }
-                    },
-                    timeGridWeek: {
-                        allDaySlot: true,
-                        allDayText: 'Todo el día',
-                        slotDuration: '01:00:00',
-                        slotLabelInterval: '01:00:00',
-                        slotMinTime: '00:00:00', // ✅ Empieza a medianoche
-                        slotMaxTime: '24:00:00', // ✅ Termina a medianoche
-                        slotLabelFormat: {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false // ✅ 24 horas
-                        }
-                    },
-                    timeGridDay: {
-                        allDaySlot: true,
-                        allDayText: 'Todo el día',
-                        slotDuration: '00:30:00',
-                        slotMinTime: '00:00:00', // ✅ 0:00
-                        slotMaxTime: '24:00:00', // ✅ 24:00
-                        slotLabelFormat: {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false // ✅ 24 horas
-                        }
-                    }
-                },
-
-                // Configuración general
-                allDaySlot: true,
-                allDayText: 'Todo el día',
-                height: 'auto',
-                contentHeight: 500,
-                editable: true,
-                droppable: true,
-                events: cargarEventosDesdeStorage(),
-
-                // ✅ ACTUALIZAR eventDrop PARA HORAS 24H
-                eventDrop: function(info) {
-                    console.log('🎮 EventDrop - Vista:', info.view.type);
-
-                    try {
-                        // 1. DETECTAR SI CAMBIÓ DE FECHA
-                        let cambioDeFecha = false;
-
-                        if (info.oldEvent && info.oldEvent.start) {
-                            cambioDeFecha = info.oldEvent.start.toDateString() !== info.event.start
-                                .toDateString();
-                        } else {
-                            cambioDeFecha = true;
-                        }
-
-                        // 2. DETERMINAR TIPO DE MOVIMIENTO
-                        const esVistaMensual = info.view.type === 'dayGridMonth';
-                        const esVistaHoraria = info.view.type.includes('timeGrid');
-
-                        // 3. APLICAR REGLAS
-                        if (esVistaMensual) {
-                            // ✅ VISTA MENSUAL: Siempre a allDay
-                            const fechaAllDay = new Date(info.event.start);
-                            fechaAllDay.setHours(12, 0, 0, 0);
-
-                            info.event.setAllDay(true);
-                            info.event.setStart(fechaAllDay);
-                            info.event.setEnd(null);
-
-                            console.log('📅 Movido en vista mensual -> allDay');
-
-                        } else if (esVistaHoraria && info.event.allDay) {
-                            // ✅ De allDay a horario (formato 24h)
-                            const hora = 8; // 08:00 en formato 24h
-                            const horaFin = hora + 1; // 09:00
-
-                            const startDate = new Date(info.event.start);
-                            startDate.setHours(hora, 0, 0, 0);
-
-                            const endDate = new Date(startDate);
-                            endDate.setHours(horaFin, 0, 0, 0);
-
-                            info.event.setAllDay(false);
-                            info.event.setStart(startDate);
-                            info.event.setEnd(endDate);
-
-                            console.log('⏰ AllDay -> Horario 24h:', hora + ':00 - ' + horaFin + ':00');
-                        }
-
-                        // 4. CAMBIAR ESTADO SI HUBO CAMBIO
-                        if (esVistaHoraria) {
-                            const estadoActual = info.event.extendedProps?.estado || 'pendiente';
-
-                            if (estadoActual === 'pendiente') {
-                                info.event.setExtendedProp('estado', 'en_progreso');
-                                info.event.setProp('color', getColorByStatus('en_progreso'));
-                                console.log('🔵 Estado -> en_progreso');
-                            }
-                        }
-
-                        // 5. GUARDAR CAMBIOS
-                        guardarEventoEnStorage(info.event, true);
-
-                        // 6. ACTUALIZAR INTERFAZ
-                        if (currentEvent && currentEvent.id === info.event.id) {
-                            setTimeout(() => {
-                                loadEventToForm(info.event);
-                            }, 100);
-                        }
-
-                        updateTodayEvents();
-
-                    } catch (error) {
-                        console.error('❌ Error en eventDrop:', error);
-                        if (info.revert && typeof info.revert === 'function') {
-                            info.revert();
-                        }
-                    }
-                },
-
-                // ==================== ACTUALIZAR dateClick ====================
-                // En la configuración del calendario:
-                // En la configuración del calendario, añade:
-                dateClick: function(info) {
-                    console.log('🖱️ Click en fecha:', info.dateStr);
-
-                    // Guardar fecha para doble click
-                    if (!this.ultimoClick) this.ultimoClick = {
-                        time: 0,
-                        date: null
-                    };
-
-                    const ahora = Date.now();
-                    const esDobleClick = (ahora - this.ultimoClick.time < 300) &&
-                        this.ultimoClick.date === info.dateStr;
-
-                    this.ultimoClick = {
-                        time: ahora,
-                        date: info.dateStr
-                    };
-
-                    if (esDobleClick) {
-                        // Doble click: ir a vista diaria automáticamente
-                        console.log('🖱️🖱️ Doble click detectado');
-                        irAVistaFecha(info.date, 'diaria');
-                        return;
-                    }
-
-                    // Click simple: seleccionar fecha normalmente
-                    const tipoVista = info.view.type === 'dayGridMonth' ? 'mensual' : 'semanal';
-                    mostrarSeleccionFecha(info.date, tipoVista);
-                    document.getElementById('eventDate').value = info.dateStr;
-                    resetToNewEvent();
-
-                    setTimeout(() => {
-                        document.getElementById('opNumber').focus();
-                    }, 100);
-                },
-
-                eventClick: function(info) {
-                    info.jsEvent.preventDefault();
-                    loadEventToForm(info.event);
-                },
-
-                eventResize: function(info) {
-                    try {
-                        console.log('📏 EventResize');
-
-                        const estadoActual = info.event.extendedProps?.estado || 'pendiente';
-                        if (estadoActual === 'pendiente') {
-                            info.event.setExtendedProp('estado', 'en_progreso');
-                            info.event.setProp('color', getColorByStatus('en_progreso'));
-                        }
-
-                        guardarEventoEnStorage(info.event, true);
-
-                        if (currentEvent && currentEvent.id === info.event.id) {
-                            loadEventToForm(info.event);
-                        }
-
-                        updateTodayEvents();
-                    } catch (error) {
-                        console.error('❌ Error en eventResize:', error);
-                    }
-                }
-            });
-
-            calendar.render();
-            updateTodayEvents();
-            resetToNewEvent();
-        });
     </script>
 @endsection
+
+
+
