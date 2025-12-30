@@ -398,6 +398,7 @@
 
             inner.appendChild(body);
             inner.appendChild(btnClose);
+
             toast.appendChild(inner);
             container.appendChild(toast);
 
@@ -411,6 +412,9 @@
             }
         }
 
+
+
+    
         // ==================== FUNCIÓN PARA MOSTRAR FECHA SELECCIONADA ====================
         function mostrarSeleccionFecha(fecha, vista = 'mensual') {
             // 1. Quitar selección anterior
@@ -680,6 +684,8 @@
             localStorage.setItem('calendar_events', JSON.stringify(eventos));
             return eventoParaBD;
         }
+
+
         // ==================== FUNCIONES DEL FORMULARIO ====================
         function loadEventToForm(event) {
             currentEvent = event;
