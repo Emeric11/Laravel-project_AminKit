@@ -306,25 +306,25 @@
 
             </template>
 
-
+      
         </div>
-
+    
     </div>
-    <!-- Eventos de hoy -->
-    <div class="mt-4">
-        <h6 class="mb-2">📅 Hoy</h6>
-        <div class="list-group" id="todayEvents">
-            <div class="list-group-item list-group-item-action py-2">
-                <small class="text-primary">10:00 AM</small>
-                <div>Reunión de equipo</div>
+                              <!-- Eventos de hoy -->
+            <div class="mt-4">
+                <h6 class="mb-2">📅 Hoy</h6>
+                <div class="list-group" id="todayEvents">
+                    <div class="list-group-item list-group-item-action py-2">
+                        <small class="text-primary">10:00 AM</small>
+                        <div>Reunión de equipo</div>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Toast container -->
-    <div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
-        <div id="toastContainer"></div>
-    </div>
+<!-- Toast container -->
+<div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+    <div id="toastContainer"></div>
+</div>
 
 @endsection
 
@@ -343,7 +343,240 @@
         let codigosCounter = 0;
         // Variable global para guardar la última fecha seleccionada
         let ultimaFechaSeleccionada = null;
+        // ==================== INICIALIZACIÓN DEL CALENDARIO ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
 
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                locale: 'es',
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listMultiMonth today'
+                },
+
+                // ✅ CONFIGURACIÓN 24 HORAS
+                // Formato de hora en 24h
+                eventTimeFormat: {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false, // ✅ Esto cambia a formato 24h
+                    meridiem: false
+                },
+
+                // Formato de etiquetas de tiempo
+                slotLabelFormat: {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false, // ✅ 24 horas
+                    meridiem: false
+                },
+
+                // Vistas con configuración 24h
+                views: {
+                    dayGridMonth: {
+                        dayMaxEventRows: 3,
+                        dayMaxEvents: true,
+                        // Eventos en vista mensual mostrarán hora en 24h si tienen
+                        eventTimeFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                        }
+                    },
+                    listMultiMonth: {
+                        type: 'list',
+                        duration: {
+                            months: 3
+                        },
+                        buttonText: '3 Meses',
+                        // Formato 24h en lista
+                        listDayFormat: {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                        }
+                    },
+                    timeGridWeek: {
+                        allDaySlot: true,
+                        allDayText: 'Todo el día',
+                        slotDuration: '01:00:00',
+                        slotLabelInterval: '01:00:00',
+                        slotMinTime: '00:00:00', // ✅ Empieza a medianoche
+                        slotMaxTime: '24:00:00', // ✅ Termina a medianoche
+                        slotLabelFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false // ✅ 24 horas
+                        }
+                    },
+                    timeGridDay: {
+                        allDaySlot: true,
+                        allDayText: 'Todo el día',
+                        slotDuration: '00:30:00',
+                        slotMinTime: '00:00:00', // ✅ 0:00
+                        slotMaxTime: '24:00:00', // ✅ 24:00
+                        slotLabelFormat: {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false // ✅ 24 horas
+                        }
+                    }
+                },
+
+                // Configuración general
+                allDaySlot: true,
+                allDayText: 'Todo el día',
+                height: 'auto',
+                contentHeight: 500,
+                editable: true,
+                droppable: true,
+                events: cargarEventosDesdeStorage(),
+
+                // ✅ ACTUALIZAR eventDrop PARA HORAS 24H
+                eventDrop: function(info) {
+                    console.log('🎮 EventDrop - Vista:', info.view.type);
+                    try {
+                        // 1. DETECTAR SI CAMBIÓ DE FECHA
+                        let cambioDeFecha = false;
+
+                        if (info.oldEvent && info.oldEvent.start) {
+                            cambioDeFecha = info.oldEvent.start.toDateString() !== info.event.start
+                                .toDateString();
+                        } else {
+                            cambioDeFecha = true;
+                        }
+                        // 2. DETERMINAR TIPO DE MOVIMIENTO
+                        const esVistaMensual = info.view.type === 'dayGridMonth';
+                        const esVistaHoraria = info.view.type.includes('timeGrid');
+                        // 3. APLICAR REGLAS
+                        if (esVistaMensual) {
+                            // ✅ VISTA MENSUAL: Siempre a allDay
+                            const fechaAllDay = new Date(info.event.start);
+                            fechaAllDay.setHours(12, 0, 0, 0);
+
+                            info.event.setAllDay(true);
+                            info.event.setStart(fechaAllDay);
+                            info.event.setEnd(null);
+
+                            console.log('📅 Movido en vista mensual -> allDay');
+                        } else if (esVistaHoraria && info.event.allDay) {
+                            // ✅ De allDay a horario (formato 24h)
+                            const hora = 8; // 08:00 en formato 24h
+                            const horaFin = hora + 1; // 09:00
+                            const startDate = new Date(info.event.start);
+                            startDate.setHours(hora, 0, 0, 0);
+
+                            const endDate = new Date(startDate);
+                            endDate.setHours(horaFin, 0, 0, 0);
+
+                            info.event.setAllDay(false);
+                            info.event.setStart(startDate);
+                            info.event.setEnd(endDate);
+
+                            console.log('⏰ AllDay -> Horario 24h:', hora + ':00 - ' + horaFin + ':00');
+                        }
+                        // 4. CAMBIAR ESTADO SI HUBO CAMBIO
+                        if (esVistaHoraria) {
+                            const estadoActual = info.event.extendedProps?.estado || 'pendiente';
+
+                            if (estadoActual === 'pendiente') {
+                                info.event.setExtendedProp('estado', 'en_progreso');
+                                info.event.setProp('color', getColorByStatus('en_progreso'));
+                                console.log('🔵 Estado -> en_progreso');
+                            }
+                        }
+                        // 5. GUARDAR CAMBIOS
+                        guardarEventoEnStorage(info.event, true);
+
+                        // 6. ACTUALIZAR INTERFAZ
+                        if (currentEvent && currentEvent.id === info.event.id) {
+                            setTimeout(() => {
+                                loadEventToForm(info.event);
+                            }, 100);
+                        }
+
+                        updateTodayEvents();
+
+                    } catch (error) {
+                        console.error('❌ Error en eventDrop:', error);
+                        if (info.revert && typeof info.revert === 'function') {
+                            info.revert();
+                        }
+                    }
+                },
+                // ==================== ACTUALIZAR dateClick ====================
+                // En la configuración del calendario:
+                // En la configuración del calendario, añade:
+                dateClick: function(info) {
+                    console.log('🖱️ Click en fecha:', info.dateStr);
+
+                    // Guardar fecha para doble click
+                    if (!this.ultimoClick) this.ultimoClick = {
+                        time: 0,
+                        date: null
+                    };
+
+                    const ahora = Date.now();
+                    const esDobleClick = (ahora - this.ultimoClick.time < 300) &&
+                        this.ultimoClick.date === info.dateStr;
+
+                    this.ultimoClick = {
+                        time: ahora,
+                        date: info.dateStr
+                    };
+
+                    if (esDobleClick) {
+                        // Doble click: ir a vista diaria automáticamente
+                        console.log('🖱️🖱️ Doble click detectado');
+                        irAVistaFecha(info.date, 'diaria');
+                        return;
+                    }
+
+                    // Click simple: seleccionar fecha normalmente
+                    const tipoVista = info.view.type === 'dayGridMonth' ? 'mensual' : 'semanal';
+                    mostrarSeleccionFecha(info.date, tipoVista);
+                    document.getElementById('eventDate').value = info.dateStr;
+                    resetToNewEvent();
+
+                    setTimeout(() => {
+                        document.getElementById('opNumber').focus();
+                    }, 100);
+                },
+
+                eventClick: function(info) {
+                    info.jsEvent.preventDefault();
+                    loadEventToForm(info.event);
+                },
+
+                eventResize: function(info) {
+                    try {
+                        console.log('📏 EventResize');
+
+                        const estadoActual = info.event.extendedProps?.estado || 'pendiente';
+                        if (estadoActual === 'pendiente') {
+                            info.event.setExtendedProp('estado', 'en_progreso');
+                            info.event.setProp('color', getColorByStatus('en_progreso'));
+                        }
+
+                        guardarEventoEnStorage(info.event, true);
+
+                        if (currentEvent && currentEvent.id === info.event.id) {
+                            loadEventToForm(info.event);
+                        }
+
+                        updateTodayEvents();
+                    } catch (error) {
+                        console.error('❌ Error en eventResize:', error);
+                    }
+                }
+            });
+
+            calendar.render();
+            updateTodayEvents();
+            resetToNewEvent();
+        });
         // ==================== UTILIDADES: Toasts y escape ====================
         function escapeHtml(unsafe) {
             if (unsafe === null || unsafe === undefined) return '';
@@ -354,22 +587,17 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         }
-
         function showToast(message, type = 'info', timeout = 3000) {
             const container = document.getElementById('toastContainer');
             if (!container) {
                 // Fallback a alert si no existe el contenedor
-                try {
-                    alert(message);
-                } catch (e) {
-                    console.log(message);
-                }
+                try { alert(message); } catch (e) { console.log(message); }
                 return;
             }
 
             const bgClass = (type === 'success') ? 'bg-success text-white' :
-                (type === 'danger') ? 'bg-danger text-white' :
-                (type === 'warning') ? 'bg-warning text-dark' : 'bg-info text-white';
+                            (type === 'danger') ? 'bg-danger text-white' :
+                            (type === 'warning') ? 'bg-warning text-dark' : 'bg-info text-white';
 
             const toast = document.createElement('div');
             toast.className = `toast align-items-center ${bgClass} border-0`;
@@ -550,7 +778,6 @@
             container.appendChild(clone);
             codigosCounter++;
         }
-
         function removeCodigoRow(button) {
             button.closest('.codigo-row').remove();
         }
@@ -622,7 +849,6 @@
             console.log(`📂 ${eventosCalendario.length} eventos cargados`);
             return eventosCalendario;
         }
-
         function guardarEventoEnStorage(eventoData, esActualizacion = false) {
             let eventos = JSON.parse(localStorage.getItem('calendar_events')) || [];
 
@@ -715,7 +941,6 @@
             document.getElementById('deleteBtn').style.display = 'block';
             document.getElementById('cancelBtn').style.display = 'block';
         }
-
         function resetToNewEvent() {
             currentEvent = null;
             // Resetear formulario
@@ -744,13 +969,10 @@
             document.getElementById('cancelBtn').style.display = 'none';
         }
         // ==================== CREAR EVENTO (allDay por defecto) ====================
-        async function saveProductionEvent() {
+        function saveProductionEvent() {
             // 1. Validar OP
             const opNumber = document.getElementById('opNumber').value.trim();
-            if (!opNumber) {
-                showToast('❌ Ingresa un número de OP', 'danger');
-                return;
-            }
+            if (!opNumber) { showToast('❌ Ingresa un número de OP', 'danger'); return; }
 
             // 2. ✅ ASEGURAR QUE SE USA LA FECHA SELECCIONADA
             let fechaEvento;
@@ -770,10 +992,7 @@
             }
             // 3. Obtener códigos
             const codigos = getCodigosFromForm();
-            if (codigos.length === 0) {
-                showToast('❌ Agrega al menos un producto', 'danger');
-                return;
-            }
+            if (codigos.length === 0) { showToast('❌ Agrega al menos un producto', 'danger'); return; }
             // 4. Crear evento allDay por defecto EN LA FECHA SELECCIONADA
             const eventoData = {
                 title: opNumber,
@@ -799,18 +1018,10 @@
                 id: eventId,
                 ...eventoData
             }, false);
-            // 6. Guardar en base de datos
-            const resultado = await guardarEventoEnDB({id: 'temp_' + Date.now(),...eventoData}, false);
-            // Actualizar ID con el real de la DB
-            if (resultado && resultado.id) {
-                nuevoEvento.setProp('id', resultado.id);
-            }
             // 7. Cargar para editar
             loadEventToForm(nuevoEvento);
             // 8. Feedback al usuario
-            showToast(
-                `✅ OP ${escapeHtml(opNumber)} creada para el ${new Date(fechaEvento).toLocaleDateString('es-ES')}`,
-                'success');
+            showToast(`✅ OP ${escapeHtml(opNumber)} creada para el ${new Date(fechaEvento).toLocaleDateString('es-ES')}`, 'success');
             // 9. Actualizar y limpiar
             updateTodayEvents();
             // 10. Limpiar selección visual
@@ -823,23 +1034,14 @@
             }, 500);
         }
         // ==================== ACTUALIZAR EVENTO (solo datos del formulario) ====================
-        async function updateProductionEvent() {
-            if (!currentEvent) {
-                showToast('❌ No hay evento seleccionado', 'danger');
-                return;
-            }
+        function updateProductionEvent() {
+            if (!currentEvent) { showToast('❌ No hay evento seleccionado', 'danger'); return; }
 
             const opNumber = document.getElementById('opNumber').value.trim();
-            if (!opNumber) {
-                showToast('❌ Ingresa un número de OP', 'danger');
-                return;
-            }
+            if (!opNumber) { showToast('❌ Ingresa un número de OP', 'danger'); return; }
 
             const codigos = getCodigosFromForm();
-            if (codigos.length === 0) {
-                showToast('❌ Agrega al menos un producto', 'danger');
-                return;
-            }
+            if (codigos.length === 0) { showToast('❌ Agrega al menos un producto', 'danger'); return; }
 
             // ✅ NO actualizar fecha/hora - solo datos del formulario
             const eventoData = {
@@ -869,22 +1071,22 @@
                 currentEvent.setExtendedProp(key, eventoData.extendedProps[key]);
             });
 
-
-            // guardarEventoEnStorage(eventoData, true);  // Guardar en localStorage
-
-            await guardarEventoEnDB(eventoData, true); // Guardar en base de datos
+            // Guardar en localStorage
+            guardarEventoEnStorage(eventoData, true);
 
             showToast(`✅ OP ${escapeHtml(opNumber)} actualizada`, 'success');
             updateTodayEvents();
             resetToNewEvent();
         }
         // ==================== ELIMINAR EVENTO ====================
-        async function deleteCurrentEvent() {
+        function deleteCurrentEvent() {
             if (!currentEvent) return;
 
             if (confirm(`¿Estás seguro de eliminar la OP "${currentEvent.title}"?`)) {
-                // Eliminar de la base de datos
-                await eliminarEventoDeDB(currentEvent.id);
+                // Eliminar de localStorage
+                let eventos = JSON.parse(localStorage.getItem('calendar_events')) || [];
+                eventos = eventos.filter(e => e.id !== currentEvent.id);
+                localStorage.setItem('calendar_events', JSON.stringify(eventos));
 
                 // Eliminar del calendario
                 currentEvent.remove();
@@ -893,7 +1095,7 @@
                 resetToNewEvent();
                 updateTodayEvents();
             }
-        }
+        }                                                     
         // ==================== FUNCIONES ADICIONALES ====================
         function updateTodayEvents() {
             const today = new Date().toDateString();
@@ -952,7 +1154,6 @@
 
             container.innerHTML = html;
         }
-
         function loadEventById(eventId) {
             const event = calendar.getEventById(eventId);
             if (event) {
@@ -960,7 +1161,6 @@
                 document.querySelector('.sidebar-actions').scrollTop = 0;
             }
         }
-
         function removeEvent(eventId) {
             const event = calendar.getEventById(eventId);
             if (event && confirm(`¿Eliminar "${event.title}"?`)) {
@@ -1065,441 +1265,8 @@
 
             setTimeout(() => notificacion.remove(), 2500);
         }
-
-        /*--------------------------------------------------DATA BASE SECCION------------------------------------------------------------------------------------------*/
-        /**
-         * Cargar eventos desde la base de datos
-         */
-        async function cargarEventosDesdeDB() {
-            try {
-                const response = await fetch('/api/calendar/events');
-                const eventos = await response.json();
-
-                // Ajustar fechas para FullCalendar
-                const eventosAjustados = eventos.map(evento => {
-                    if (evento.allDay && evento.start) {
-                        // Si es allDay y hora es 00:00, ajustar a medio día
-                        const fecha = new Date(evento.start);
-                        if (fecha.getHours() === 0 && fecha.getMinutes() === 0) {
-                            fecha.setHours(12, 0, 0, 0);
-                            evento.start = fecha.toISOString();
-                        }
-                        if (evento.end) {
-                            const fechaEnd = new Date(evento.end);
-                            if (fechaEnd.getHours() === 0 && fechaEnd.getMinutes() === 0) {
-                                fechaEnd.setHours(12, 0, 0, 0);
-                                evento.end = fechaEnd.toISOString();
-                            }
-                        }
-                    }
-                    return evento;
-                });
-
-                console.log('📂 Eventos ajustados:', eventosAjustados);
-                return eventosAjustados;
-
-            } catch (error) {
-                console.error('❌ Error:', error);
-                return cargarEventosDesdeStorage();
-            }
-        }
-        /**
-         * Actualiza SOLO la fecha/hora de un evento en la DB
-         * @param {string} eventId - ID del evento
-         * @param {Date} newStart - Nueva fecha/hora de inicio
-         * @param {Date} newEnd - Nueva fecha/hora de fin (opcional)
-         * @param {boolean} newAllDay - Si es todo el día
-         */
-        async function actualizarFechaHoraEventoDB(eventId, newStart, newEnd = null, newAllDay = false, nuevoEstado =
-        null) {
-            try {
-                const data = {
-                    start: newStart.toISOString(),
-                    end: newEnd ? newEnd.toISOString() : null,
-                    all_day: newAllDay
-                };
-
-                // Si hay nuevo estado, incluirlo
-                if (nuevoEstado) {
-                    data.estado = nuevoEstado;
-                }
-
-                const response = await fetch(`/api/calendar/events/${eventId}/datetime`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                if (!response.ok) throw new Error('Error actualizando');
-
-                console.log('✅ Fecha/hora y estado actualizados en DB');
-                return true;
-
-            } catch (error) {
-                console.error('❌ Error:', error);
-                return false;
-            }
-        }
-        /**
-         * Guardar evento en base de datos
-         */
-        async function guardarEventoEnDB(eventoData, esActualizacion = false) {
-
-
-            const url = esActualizacion ?
-                `/api/calendar/events/${eventoData.id}` :
-                '/api/calendar/events';
-
-            const method = esActualizacion ? 'PATCH' : 'POST'; // ← USA PATCH
-
-            // Preparar datos para la DB
-            const dbEvent = {
-                id: eventoData.id,
-                title: eventoData.title || '',
-                start: eventoData.start instanceof Date ? eventoData.start.toISOString() : eventoData.start,
-                end: eventoData.end ? (eventoData.end instanceof Date ? eventoData.end.toISOString() : eventoData
-                    .end) : null,
-                all_day: eventoData.allDay === true,
-                color: eventoData.color,
-                op_number: eventoData.extendedProps?.op_number || eventoData.title || '',
-                cliente: eventoData.extendedProps?.cliente || '',
-                cantidad_req: parseInt(eventoData.extendedProps?.cantidadReq) || 0,
-                fecha_entrega: eventoData.extendedProps?.fechaEntrega || null,
-                fecha_produccion: eventoData.extendedProps?.fechaProduccion || null,
-                estado: eventoData.extendedProps?.estado || 'pendiente',
-                codigos: eventoData.extendedProps?.codigos || []
-            };
-
-            // Eliminar id si es nuevo
-            if (!esActualizacion) {
-                delete dbEvent.id;
-            }
-
-            const response = await fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify(dbEvent)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Error en la respuesta del servidor');
-            }
-
-            const result = await response.json();
-
-            // Guardar también en localStorage como backup
-            guardarEventoEnStorage(eventoData, esActualizacion);
-
-            return result.event;
-
-
-        }
-        /**
-         * Eliminar evento de la base de datos
-         */
-        async function eliminarEventoDeDB(eventId) {
-            try {
-                const response = await fetch(`/api/calendar/events/${eventId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute(
-                            'content')
-                    }
-                });
-
-                if (!response.ok) throw new Error('Error al eliminar');
-
-                // También eliminar de localStorage
-                eliminarEventoDeStorage(eventId);
-
-                return true;
-
-            } catch (error) {
-                console.error('❌ Error eliminando de DB:', error);
-                // Fallback a localStorage
-                return eliminarEventoDeStorage(eventId);
-            }
-        }
-        // ==================== FUNCIONES AUXILIARES DE FALLBACK ====================
-
-        function eliminarEventoDeStorage(eventId) {
-            let eventos = JSON.parse(localStorage.getItem('calendar_events')) || [];
-            eventos = eventos.filter(e => e.id !== eventId);
-            localStorage.setItem('calendar_events', JSON.stringify(eventos));
-            return true;
-        }
-
-        function formatTime(date) {
-            return date.toLocaleTimeString('es-ES', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
-        }
-        // ==================== INICIALIZACIÓN DEL CALENDARIO ====================
-        document.addEventListener('DOMContentLoaded', function() {
-            const calendarEl = document.getElementById('calendar');
-            // Carga eventos primero
-
-            calendar = new FullCalendar.Calendar(calendarEl, {
-                locale: 'es',
-                initialView: 'dayGridMonth',
-                headerToolbar: {
-                    left: 'prev,next',
-                    center: 'title',
-                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listMultiMonth today'
-                },
-
-                // ✅ CONFIGURACIÓN 24 HORAS
-                // Formato de hora en 24h
-                eventTimeFormat: {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false, // ✅ Esto cambia a formato 24h
-                    meridiem: false
-                },
-
-                // Formato de etiquetas de tiempo
-                slotLabelFormat: {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false, // ✅ 24 horas
-                    meridiem: false
-                },
-
-                // Vistas con configuración 24h
-                views: {
-                    dayGridMonth: {
-                        dayMaxEventRows: 3,
-                        dayMaxEvents: true,
-                        // Eventos en vista mensual mostrarán hora en 24h si tienen
-                        eventTimeFormat: {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false
-                        }
-                    },
-                    listMultiMonth: {
-                        type: 'list',
-                        duration: {
-                            months: 3
-                        },
-                        buttonText: '3 Meses',
-                        // Formato 24h en lista
-                        listDayFormat: {
-                            weekday: 'short',
-                            day: 'numeric',
-                            month: 'short'
-                        }
-                    },
-                    timeGridWeek: {
-                        allDaySlot: true,
-                        allDayText: 'Todo el día',
-                        slotDuration: '01:00:00',
-                        slotLabelInterval: '01:00:00',
-                        slotMinTime: '00:00:00', // ✅ Empieza a medianoche
-                        slotMaxTime: '24:00:00', // ✅ Termina a medianoche
-                        slotLabelFormat: {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false // ✅ 24 horas
-                        }
-                    },
-                    timeGridDay: {
-                        allDaySlot: true,
-                        allDayText: 'Todo el día',
-                        slotDuration: '00:30:00',
-                        slotMinTime: '00:00:00', // ✅ 0:00
-                        slotMaxTime: '24:00:00', // ✅ 24:00
-                        slotLabelFormat: {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false // ✅ 24 horas
-                        }
-                    }
-                },
-
-                // Configuración general
-                allDaySlot: true,
-                allDayText: 'Todo el día',
-                height: 'auto',
-                contentHeight: 500,
-                editable: true,
-                droppable: true,
-                events: '/api/calendar/events', // ← FullCalendar hace fetch automático
-
-                
-                // ✅ ACTUALIZAR eventDrop PARA HORAS 24H
-                eventDataTransform: function(eventData) {
-                    // Asignar color automáticamente según estado
-                    const estado = eventData.extendedProps?.estado || 'pendiente';
-                    eventData.color = getColorByStatus(estado);
-                    return eventData;
-                },
-                eventDrop: function(info) {
-                    try {
-                        const esVistaHoraria = info.view.type.includes('timeGrid');
-                        const esVistaMensual = info.view.type === 'dayGridMonth';
-
-                        let newStart = info.event.start;
-                        let newEnd = info.event.end;
-                        let newAllDay = info.event.allDay;
-                        let nuevoEstado = null;
-
-                        if (esVistaMensual) {
-                            // Vista mensual: allDay a medio día
-                            const fechaAllDay = new Date(info.event.start);
-                            fechaAllDay.setHours(12, 0, 0, 0);
-
-                            newStart = fechaAllDay;
-                            newEnd = null;
-                            newAllDay = true;
-
-                            info.event.setAllDay(true);
-                            info.event.setStart(fechaAllDay);
-                            info.event.setEnd(null);
-
-                        } else if (esVistaHoraria) {
-                            // ✅ VISTA HORARIA: end = start + 1 hora
-                            const startDate = new Date(info.event.start);
-
-                            // Crear end sumando 1 hora
-                            const endDate = new Date(startDate);
-                            endDate.setHours(endDate.getHours() + 1);
-
-                            newStart = startDate;
-                            newEnd = endDate;
-                            newAllDay = false;
-
-                            // Aplicar al evento
-                            info.event.setAllDay(false);
-                            info.event.setStart(startDate);
-                            info.event.setEnd(endDate);
-
-                            // Si era allDay antes, mantener la hora personalizada
-                            if (info.event.allDay) {
-                                info.event.setAllDay(false);
-                            }
-
-                            console.log(
-                                `⏰ Drop horario: ${formatTime(startDate)} - ${formatTime(endDate)}`);
-
-                            // Cambiar estado si era pendiente
-                            const estadoActual = info.event.extendedProps?.estado || 'pendiente';
-                            if (estadoActual === 'pendiente') {
-                                nuevoEstado = 'en_progreso';
-                                info.event.setExtendedProp('estado', nuevoEstado);
-                                info.event.setProp('color', getColorByStatus(nuevoEstado));
-                            }
-                        }
-
-                        // Guardar en DB
-                        actualizarFechaHoraEventoDB(
-                            info.event.id,
-                            newStart,
-                            newEnd,
-                            newAllDay,
-                            nuevoEstado
-                        );
-
-                        // Actualizar interfaz si está en edición
-                        if (currentEvent && currentEvent.id === info.event.id) {
-                            setTimeout(() => loadEventToForm(info.event), 100);
-                        }
-
-                        updateTodayEvents();
-
-                    } catch (error) {
-                        console.error('❌ Error:', error);
-                        if (info.revert) info.revert();
-                    }
-                },
-                // ==================== ACTUALIZAR dateClick ====================
-                // En la configuración del calendario:
-                // En la configuración del calendario, añade:
-                dateClick: function(info) {
-                    console.log('🖱️ Click en fecha:', info.dateStr);
-
-                    // Guardar fecha para doble click
-                    if (!this.ultimoClick) this.ultimoClick = {
-                        time: 0,
-                        date: null
-                    };
-
-                    const ahora = Date.now();
-                    const esDobleClick = (ahora - this.ultimoClick.time < 300) &&
-                        this.ultimoClick.date === info.dateStr;
-
-                    this.ultimoClick = {
-                        time: ahora,
-                        date: info.dateStr
-                    };
-
-                    if (esDobleClick) {
-                        // Doble click: ir a vista diaria automáticamente
-                        console.log('🖱️🖱️ Doble click detectado');
-                        irAVistaFecha(info.date, 'diaria');
-                        return;
-                    }
-
-                    // Click simple: seleccionar fecha normalmente
-                    const tipoVista = info.view.type === 'dayGridMonth' ? 'mensual' : 'semanal';
-                    mostrarSeleccionFecha(info.date, tipoVista);
-                    document.getElementById('eventDate').value = info.dateStr;
-                    resetToNewEvent();
-
-                    setTimeout(() => {
-                        document.getElementById('opNumber').focus();
-                    }, 100);
-                },
-
-                eventClick: function(info) {
-                    info.jsEvent.preventDefault();
-                    loadEventToForm(info.event);
-                },
-
-                eventResize: function(info) {
-                    try {
-                        console.log('📏 EventResize');
-
-                        const estadoActual = info.event.extendedProps?.estado || 'pendiente';
-                        if (estadoActual === 'pendiente') {
-                            info.event.setExtendedProp('estado', 'en_progreso');
-                            info.event.setProp('color', getColorByStatus('en_progreso'));
-                            // Guardar todo porque cambió estado
-                            guardarEventoEnDB(info.event, true);
-                        } else {
-                            // Solo fecha/hora
-                            actualizarFechaHoraEventoDB(
-                                info.event.id,
-                                info.event.start,
-                                info.event.end,
-                                info.event.allDay
-                            );
-                        }
-
-                        if (currentEvent && currentEvent.id === info.event.id) {
-                            loadEventToForm(info.event);
-                        }
-
-                        updateTodayEvents();
-                    } catch (error) {
-                        console.error('❌ Error en eventResize:', error);
-                    }
-                }
-            });
-
-            calendar.render();
-            updateTodayEvents();
-            resetToNewEvent();
-        });
     </script>
 @endsection
+
+
+
